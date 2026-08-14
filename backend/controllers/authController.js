@@ -153,11 +153,8 @@ export const verifyOtp = asyncHandler(async (req, res) => {
 });
 
 export const verifyEmail = asyncHandler(async (req, res) => {
-	console.log(req.body)
 	const { otp } = req?.body || {};
 	const userId = req.userId;
-
-	console.log(otp, userId)
 
 	if (!userId || !otp) {
 		return res.status(400).json({ success: false, message: "Missing Details" });
@@ -167,17 +164,14 @@ export const verifyEmail = asyncHandler(async (req, res) => {
 
 	console.log(user)
 	if (!user) {
-		console.log("Here")
 		return res.status(404).json({ success: false, message: "User not found" });
 	}
 
 	if (!user.vetifyOtp || user.vetifyOtp !== otp) {
-		console.log("Here 2");
 		return res.status(400).json({ success: false, message: "Invalid OTP" });
 	}
 
 	if (user.verifyOtpExpireAt < Date.now()) {
-		console.log("Here 3");
 		return res.status(400).json({ success: false, message: "OTP Expired" });
 	}
 
