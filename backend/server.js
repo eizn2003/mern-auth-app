@@ -8,7 +8,7 @@ import userRoute from "./routes/userRoute.js"
 
 connectDB();
 
-const allowedOrigins = ['http://localhost:5173']
+const allowedOrigins = ['http://localhost:5173', 'https://ernestmernauth.netlify.app'];
 
 const app = express();
 
