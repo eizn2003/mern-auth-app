@@ -31,6 +31,7 @@ export const Login = () => {
 					setIsLoggedin(true);
 					await getUserData();
 					navigate("/");
+					toast.success(data.success)
 				} else {
 					toast.error(data.message);
 				}
@@ -43,6 +44,7 @@ export const Login = () => {
 					setIsLoggedin(true);
 					await getUserData();
 					navigate("/");
+					toast.success(data.success)
 				} else {
 					toast.error(data.message);
 				}
