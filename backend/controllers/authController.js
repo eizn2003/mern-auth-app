@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { userModel } from "../models/userModel.js";
 import { transporter } from "../config/nodemailer.js";
+import { EMAIL_VERIFY_TEMPLATE, PASSWORD_RESET_TEMPLATE } from '../config/emailTemplates.js'
 
 //@desc Register User
 //method POST
@@ -13,7 +14,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 
 	//check id client data is full
 	if (!name || !email || !password) {
-		return res.status(400).json({ Success: false, message: "Missing Details" });
+		return res.status(400).json({ success: false, message: "Missing Details" });
 	}
 
 	//check if user already exists
@@ -22,7 +23,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 	if (existingUser) {
 		return res
 			.status(409)
-			.json({ Success: false, message: "User with this Email already exists" });
+			.json({ success: false, message: "User with this Email already exists" });
 	}
 
 	//Hash user password
@@ -58,7 +59,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 
 	return res
 		.status(201)
-		.json({ Success: true, message: "User created successfully" });
+		.json({ success: true, message: "User created successfully" });
 });
 
 //@desc User Login
@@ -69,7 +70,7 @@ export const loginUser = asyncHandler(async (req, res) => {
 
 	//check id client data is full
 	if (!email || !password) {
-		return res.status(400).json({ Success: false, message: "Missing Details" });
+		return res.status(400).json({ success: false, message: "Missing Details" });
 	}
 
 	//check if user exists
@@ -99,11 +100,11 @@ export const loginUser = asyncHandler(async (req, res) => {
 
 		return res
 			.status(200)
-			.json({ Success: true, message: "User logged in successfully" });
+			.json({ success: true, message: "User logged in successfully" });
 	} else {
 		return res
 			.status(400)
-			.json({ Success: false, message: "Invalid Email or Password" });
+			.json({ success: false, message: "Invalid Email or Password" });
 	}
 });
 
@@ -114,7 +115,7 @@ export const logoutUser = asyncHandler(async (req, res) => {
 		sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
 	});
 
-	res.status(200).json({ Success: true, message: "Logged Out Successfully" });
+	res.status(200).json({ success: true, message: "Logged Out Successfully" });
 });
 
 export const verifyOtp = asyncHandler(async (req, res) => {
@@ -125,7 +126,7 @@ export const verifyOtp = asyncHandler(async (req, res) => {
 	if (user.isAccountVerified) {
 		return res
 			.status(400)
-			.json({ Success: false, message: "Account already verified" });
+			.json({ success: false, message: "Account already verified" });
 	}
 
 	const otp = String(Math.floor(100000 + Math.random() * 900000));
@@ -140,14 +141,15 @@ export const verifyOtp = asyncHandler(async (req, res) => {
 		from: process.env.SENDER_EMAIL,
 		to: user.email,
 		subject: `Account Verification OTP`,
-		text: `Hey ${user.name}!, Here is you account verification OTP number: ${otp}`,
+		//text: `Hey ${user.name}!, Here is you account verification OTP number: ${otp}`,
+		html: EMAIL_VERIFY_TEMPLATE.replace("{{otp}}", otp).replace("{{email}}", user.email)
 	};
 
 	await transporter.sendMail(mailOptions);
 
 	return res
-		.status(400)
-		.json({ Success: true, message: "Verification OTP sent on Email" });
+		.status(200)
+		.json({ success: true, message: "Verification OTP sent on Email" });
 });
 
 export const verifyEmail = asyncHandler(async (req, res) => {
@@ -184,4 +186,72 @@ export const verifyEmail = asyncHandler(async (req, res) => {
 
 export const isAuthenticated = asyncHandler(async(req, res) => {
 	return res.json({success: true})
+})
+
+export const sendResetOtp = asyncHandler(async (req, res) => {
+	const { email } = req?.body || {};
+
+	if(!email) {
+		return res.status(400).json({ success: false, message: "Email Required" });
+	}
+
+	const user = await userModel.findOne({email});
+	if (!user) {
+		return res.status(400).json({success: false, message: `User with ${email} not found`})
+	}
+
+	const otp = String(Math.floor(100000 + Math.random() * 900000));
+
+	user.resetOtp = otp;
+	user.resetOtpExpireAt = Date.now() + 15 * 60 * 1000;
+
+	await user.save()
+
+	//Send OTP Email
+	const mailOptions = {
+		from: process.env.SENDER_EMAIL,
+		to: user.email,
+		subject: `Password reset OTP`,
+		//text: `Hey ${user.name}!, Here is your password reset OTP number: ${otp}`,
+		html: PASSWORD_RESET_TEMPLATE.replace("{{otp}}", otp).replace(
+			"{{email}}",
+			user.email,
+		),
+	};
+
+	await transporter.sendMail(mailOptions);
+
+	return res.json({success: true, message: `OTP sent to ${email}`})
+})
+
+export const resetPassword = asyncHandler(async (req, res) => {
+	const {email, otp, newPassword} = req?.body || {};
+
+	if(!email || !otp || !newPassword) {
+		return res.status(400).json({success: false, message: "Email, OTP and New Password are required" });
+	}
+
+	const user = await userModel.findOne({email})
+
+	if(!user) {
+		return res.status(400).json({success: false, message: "User not found!"})
+	}
+
+	if(user.resetOtp === "" || user.resetOtp !== otp) {
+		return res.status(400).json({success: false, message: "Invalid OTP"})
+	}
+
+	if(user.resetOtpExpireAt < Date.now()) {
+		return res.status(400).json({success: false, message: "OTP Expired"})
+	}
+
+	const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+	user.password = hashedPassword;
+	user.resetOtp = '';
+	user.resetOtpExpireAt = 0;
+
+	await user.save();
+
+	return res.json({success: true, message: "Password reset successfully"})
 })
